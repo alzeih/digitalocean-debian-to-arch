@@ -46,6 +46,9 @@ target_disklabel="gpt"
 # new filesystem type (ext4/btrfs)
 target_filesystem="ext4"
 
+# new bootloader (grub/syslinux)
+target_bootloader=grub
+
 # NOT EXPOSED NORMALLY: don't prompt
 continue_without_prompting=0
 
@@ -78,6 +81,7 @@ flag_variables=(
 	target_architecture
 	target_disklabel
 	target_filesystem
+	target_bootloader
 )
 
 host_packages=(
@@ -86,7 +90,6 @@ host_packages=(
 )
 
 arch_packages=(
-	grub
 	openssh
 )
 
@@ -189,6 +192,17 @@ validate_flags_and_augment_globals() {
 			;;
 		*)
 			fatal "Unknown filesystem type: ${target_filesystem}"
+			;;
+	esac
+	case "${target_bootloader}" in
+		grub)
+			arch_packages+=(grub)
+			;;
+		syslinux)
+			arch_packages+=(syslinux)
+			;;
+		*)
+			fatal "Unknown bootloader type: ${target_bootloader}"
 			;;
 	esac
 	local disk_MiB=$(($(cat /sys/block/vda/size) >> 11))
