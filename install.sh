@@ -73,7 +73,7 @@ shopt -s nullglob
 shopt -s dotglob
 umask 022
 
-sector_size=512
+sector_size=$(cat /sys/block/vda/queue/physical_block_size)
 
 flag_variables=(
 	archlinux_mirror
@@ -93,15 +93,14 @@ arch_packages=(
 	openssh
 )
 
+partitions=(
+	DOROOT
+)
+
 gpt1_size_MiB=1
 doroot_size_MiB=6
 biosboot_size_MiB=1
-archroot_size_MiB=
-gpt2_size_MiB=1
-
-doroot_offset_MiB=$((gpt1_size_MiB))
-biosboot_offset_MiB=$((doroot_offset_MiB + doroot_size_MiB))
-archroot_offset_MiB=$((biosboot_offset_MiB + biosboot_size_MiB))
+boot_size_MiB=100
 
 log() {
 	echo "[$(date)]" "$@" >&2
@@ -197,16 +196,18 @@ validate_flags_and_augment_globals() {
 	case "${target_bootloader}" in
 		grub)
 			arch_packages+=(grub)
+			partitions+=(BIOSBoot)
+			partitions+=(ArchRoot)
 			;;
 		syslinux)
 			arch_packages+=(syslinux)
+			partitions+=(ArchBoot)
+			partitions+=(ArchRoot)
 			;;
 		*)
 			fatal "Unknown bootloader type: ${target_bootloader}"
 			;;
 	esac
-	local disk_MiB=$(($(cat /sys/block/vda/size) >> 11))
-	archroot_size_MiB=$((disk_MiB - gpt2_size_MiB - archroot_offset_MiB))
 }
 
 read_flags() {
@@ -268,26 +269,61 @@ download_and_verify() {
 	return 1
 }
 
+build_parted_command () {
+	local start=$1
+	local end=$2
+	local gptlabel=$3
+	local cmdline=" mkpart"
+
+	if [ "${target_disklabel}" = "dos" ]; then
+		cmdline+=" primary"
+	elif [ "${target_disklabel}" = "gpt" ]; then
+		cmdline+=" ${gptlabel}"
+	fi
+	cmdline+=" ${start} ${end}"
+
+	echo "$cmdline"
+}
+
 build_parted_cmdline() {
 	local cmdline=
-	local biosboot_name=BIOSBoot
-	local doroot_name=DORoot
-	local archroot_name=ArchRoot
-	if [ ${target_disklabel} = dos ]; then
-		cmdline="mklabel msdos"
-		biosboot_name=primary
-		doroot_name=primary
-		archroot_name=primary
-	else
-		cmdline="mklabel ${target_disklabel}"
-	fi
-	local archroot_end_MiB=$((archroot_offset_MiB + archroot_size_MiB))
-	cmdline+=" mkpart ${doroot_name} ${doroot_offset_MiB}MiB ${biosboot_offset_MiB}MiB"
-	cmdline+=" mkpart ${biosboot_name} ${biosboot_offset_MiB}MiB ${archroot_offset_MiB}MiB"
-	cmdline+=" mkpart ${archroot_name} ${archroot_offset_MiB}MiB ${archroot_end_MiB}MiB"
-	if [ ${target_disklabel} = gpt ]; then
-		cmdline+=" set 2 bios_grub on"
-	fi
+
+	cmdline="mklabel ${target_disklabel}"
+
+	local end_MiB=$((gpt1_size_MiB))
+	local partition_count=0
+	for partition_key in ${partitions[@]}; do
+		local start_MiB=${end_MiB}
+		partition_count=$(( ${partition_count} + 1))
+		case "${partition_key}" in
+			"DOROOT")
+				local size_MiB=${doroot_size_MiB}
+				end_MiB=$(( ${end_MiB} + ${size_MiB} ))
+				cmdline+=$( build_parted_command "${start_MiB}MiB" "${end_MiB}MiB" "${partition_key}" )
+				continue
+				;;
+			"BIOSBoot")
+				local size_MiB=${biosboot_size_MiB}
+				end_MiB=$(( ${end_MiB} + ${size_MiB} ))
+				cmdline+=$( build_parted_command "${start_MiB}MiB" "${end_MiB}MiB" "${partition_key}" )
+				if [ "${target_disklabel}" = "gpt" ]; then
+					cmdline+=" set ${partition_count} bios_grub on"
+				fi
+				continue
+				;;
+			"ArchBoot")
+				local size_MiB=${boot_size_MiB}
+				end_MiB=$(( ${end_MiB} + ${size_MiB} ))
+				cmdline+=$( build_parted_command "${start_MiB}MiB" "${end_MiB}MiB" "${partition_key}" )
+				continue
+				;;
+			"ArchRoot")
+				cmdline+=$( build_parted_command "${start_MiB}MiB" "100%" "${partition_key}" )
+				continue
+				;;
+			esac
+	done
+
 	echo "${cmdline}"
 }
 
