@@ -201,7 +201,9 @@ validate_flags_and_augment_globals() {
 	case "${target_bootloader}" in
 		grub)
 			arch_packages+=(grub)
-			partitions+=(BIOSBoot)
+			if [ "${target_disklabel}" = "gpt" ]; then
+				partitions+=(BIOSBoot)
+			fi
 			partitions+=(ArchRoot)
 			;;
 		syslinux)
@@ -313,9 +315,6 @@ build_parted_cmdline() {
 				local size_MiB=${biosboot_size_MiB}
 				end_MiB=$(( ${end_MiB} + ${size_MiB} ))
 				cmdline+=$( build_parted_command "${start_MiB}MiB" "${end_MiB}MiB" "${partition_key}" )
-				if [ "${target_disklabel}" = "gpt" ]; then
-					cmdline+=" set ${partition_count} bios_grub on"
-				fi
 				continue
 				;;
 			"ArchBoot")
@@ -888,6 +887,7 @@ stage4_convert() {
 	mount -t sysfs sys /archroot/sys
 	mount -t devtmpfs dev /archroot/dev
 	if [ "${target_bootloader}" = "grub" ]; then
+		chroot /archroot sgdisk /dev/vda --attributes=2:set:2
 		chroot /archroot grub-mkconfig -o /boot/grub/grub.cfg
 		chroot /archroot grub-install /dev/vda
 	elif [ "${target_bootloader}" = "syslinux" ]; then
