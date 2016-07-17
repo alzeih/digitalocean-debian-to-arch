@@ -49,6 +49,9 @@ target_filesystem="ext4"
 # new bootloader (grub/syslinux)
 target_bootloader=grub
 
+# use a separate boot partition
+target_boot_partition=1
+
 # NOT EXPOSED NORMALLY: don't prompt
 continue_without_prompting=0
 
@@ -82,6 +85,7 @@ flag_variables=(
 	target_disklabel
 	target_filesystem
 	target_bootloader
+	target_boot_partition
 )
 
 host_packages=(
@@ -202,7 +206,9 @@ validate_flags_and_augment_globals() {
 			;;
 		syslinux)
 			arch_packages+=(syslinux)
-			partitions+=(ArchBoot)
+			if [ "${target_boot_partition}" ]; then
+				partitions+=(ArchBoot)
+			fi
 			partitions+=(ArchRoot)
 			;;
 		*)
@@ -328,6 +334,17 @@ build_parted_cmdline() {
 	echo "${cmdline}"
 }
 
+genfstab_for() {
+	local partlabel=$1
+	local mountpoint=$2
+	local mount_args=$3
+	cat >> /d2a/work/archroot/etc/fstab <<-EOF
+		# ${mountpoint}
+		UUID="$( blkid -o value -s UUID -t PARTLABEL="${partlabel}")"	${mountpoint}	$( blkid -o value -s TYPE -t PARTLABEL="${partlabel}" )	${mount_args}
+
+	EOF
+}
+
 package_digitalocean_synchronize() {
 	local destination=$1
 	local pkgroot=/d2a/work/dosync
@@ -405,7 +422,7 @@ stage1_install() {
 	partprobe
 	mkfs.ext4 -L DOROOT /dev/disk/by-partlabel/DOROOT
 	mkfs.${target_filesystem} -L ArchRoot /dev/disk/by-partlabel/ArchRoot
-	if [ "${target_bootloader}" = "syslinux" ]; then
+	if [ "${target_boot_partition}" ]; then
 		mkfs.ext4 -L ArchBoot /dev/disk/by-partlabel/ArchBoot
 	fi
 
@@ -413,7 +430,7 @@ stage1_install() {
 	mkdir -p /d2a/work/{doroot,archroot}
 	mount /dev/disk/by-partlabel/DOROOT /d2a/work/doroot
 	mount /dev/disk/by-partlabel/ArchRoot /d2a/work/archroot
-	if [ "${target_bootloader}" = "syslinux" ]; then
+	if [ "${target_boot_partition}" ]; then
 		mkdir /d2a/work/archroot/boot
 		mount /dev/disk/by-partlabel/ArchBoot /d2a/work/archroot/boot
 	fi
@@ -508,8 +525,18 @@ stage1_install() {
 		sed -i "s_    APPEND root=/dev/sda3 rw_    APPEND root=/dev/disk/by-partlabel/ArchRoot rw_" /d2a/work/archroot/boot/syslinux/syslinux.cfg
 	fi
 
+	log "Generating fstab ..."
+	genfstab_for "ArchRoot" "/" "rw,relatime	0	0"
+	if [ "${target_boot_partition}" ]; then
+		genfstab_for "ArchBoot" "/boot" "rw,relatime	0	1"
+	fi
+
 	log "Finishing up image generation ..."
 	ln -f /d2a/work/image /d2a/image
+
+	cp /d2a/work/archroot/etc/fstab /d2a/fstab
+	sed -i "s_/_/archroot/_" /d2a/fstab
+
 	cleanup_work_directory
 	trap - EXIT
 }
@@ -775,6 +802,9 @@ stage3_prepare() {
 	# copy in the blockplan
 	cp /d2a/blockplan /d2a/mid/blockplan
 
+	# copy in the fstab
+	cp /d2a/fstab /d2a/mid/etc/fstab
+
 	# write out flags
 	write_flags /d2a/mid/flags
 
@@ -851,12 +881,9 @@ stage4_convert() {
 
 	# install bootloader
 	mkdir /archroot
-	if [ "${target_bootloader}" = "grub" ]; then
-		mount /dev/vda3 /archroot
-	elif [ "${target_bootloader}" = "syslinux" ]; then
-		mount /dev/vda3 /archroot
-		mount /dev/vda2 /archroot/boot
-	fi
+
+	mount -a
+
 	mount -t proc proc /archroot/proc
 	mount -t sysfs sys /archroot/sys
 	mount -t devtmpfs dev /archroot/dev
@@ -865,12 +892,12 @@ stage4_convert() {
 		chroot /archroot grub-install /dev/vda
 	elif [ "${target_bootloader}" = "syslinux" ]; then
 		chroot /archroot syslinux-install_update -a -m
-		umount /archroot/boot
 	fi
+
 	umount /archroot/dev
 	umount /archroot/sys
 	umount /archroot/proc
-	umount /archroot
+	umount -a
 
 	# we're done!
 	sync
