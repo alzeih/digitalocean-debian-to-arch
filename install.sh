@@ -175,6 +175,7 @@ validate_flags_and_augment_globals() {
 	arch_packages+=(${kernel_package})
 	case "${target_disklabel}" in
 		gpt)
+			arch_packages+=(gptfdisk)
 			;;
 		dos)
 			;;
@@ -373,6 +374,7 @@ cleanup_work_directory() {
 	quietly_umount /d2a/work/archroot/dev
 	quietly_umount /d2a/work/archroot/sys
 	quietly_umount /d2a/work/archroot/proc
+	quietly_umount /d2a/work/archroot/boot
 	quietly_umount /d2a/work/archroot
 	losetup -D
 	rm -rf --one-file-system /d2a/work
@@ -403,11 +405,18 @@ stage1_install() {
 	partprobe
 	mkfs.ext4 -L DOROOT /dev/disk/by-partlabel/DOROOT
 	mkfs.${target_filesystem} -L ArchRoot /dev/disk/by-partlabel/ArchRoot
+	if [ "${target_bootloader}" = "syslinux" ]; then
+		mkfs.ext4 -L ArchBoot /dev/disk/by-partlabel/ArchBoot
+	fi
 
 	log "Mounting image ..."
 	mkdir -p /d2a/work/{doroot,archroot}
 	mount /dev/disk/by-partlabel/DOROOT /d2a/work/doroot
 	mount /dev/disk/by-partlabel/ArchRoot /d2a/work/archroot
+	if [ "${target_bootloader}" = "syslinux" ]; then
+		mkdir /d2a/work/archroot/boot
+		mount /dev/disk/by-partlabel/ArchBoot /d2a/work/archroot/boot
+	fi
 
 	log "Setting up DOROOT ..."
 	mkdir -p /d2a/work/doroot/etc/network
@@ -492,6 +501,11 @@ stage1_install() {
 			PermitRootLogin yes
 
 		EOF
+	fi
+
+	if [ "${target_bootloader}" = "syslinux" ]; then
+		chroot /d2a/work/archroot syslinux-install_update -i
+		sed -i "s_    APPEND root=/dev/sda3 rw_    APPEND root=/dev/disk/by-partlabel/ArchRoot rw_" /d2a/work/archroot/boot/syslinux/syslinux.cfg
 	fi
 
 	log "Finishing up image generation ..."
@@ -837,12 +851,22 @@ stage4_convert() {
 
 	# install bootloader
 	mkdir /archroot
-	mount /dev/vda3 /archroot
+	if [ "${target_bootloader}" = "grub" ]; then
+		mount /dev/vda3 /archroot
+	elif [ "${target_bootloader}" = "syslinux" ]; then
+		mount /dev/vda3 /archroot
+		mount /dev/vda2 /archroot/boot
+	fi
 	mount -t proc proc /archroot/proc
 	mount -t sysfs sys /archroot/sys
 	mount -t devtmpfs dev /archroot/dev
-	chroot /archroot grub-mkconfig -o /boot/grub/grub.cfg
-	chroot /archroot grub-install /dev/vda
+	if [ "${target_bootloader}" = "grub" ]; then
+		chroot /archroot grub-mkconfig -o /boot/grub/grub.cfg
+		chroot /archroot grub-install /dev/vda
+	elif [ "${target_bootloader}" = "syslinux" ]; then
+		chroot /archroot syslinux-install_update -a -m
+		umount /archroot/boot
+	fi
 	umount /archroot/dev
 	umount /archroot/sys
 	umount /archroot/proc
