@@ -419,6 +419,23 @@ stage1_install() {
 	modprobe loop
 	losetup -f -P /d2a/work/image
 	partprobe
+
+	# Occasionally we don't get the partitions first time just /dev/loop0
+	local retry
+	for retry in 1 2 3 4 5; do
+		if [ -b /dev/disk/by-partlabel/ArchRoot ]; then
+			retry=0
+			break
+		else
+			losetup -D
+			sleep 1
+			losetup -f -P /d2a/work/image
+		fi
+	done
+	if (( retry )); then
+		fatal "Unable to setup loopback device"
+	fi
+
 	mkfs.ext4 -L DOROOT /dev/disk/by-partlabel/DOROOT
 	mkfs.${target_filesystem} -L ArchRoot /dev/disk/by-partlabel/ArchRoot
 	if [ "${target_boot_partition}" ]; then
