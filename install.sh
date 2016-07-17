@@ -327,12 +327,6 @@ build_parted_cmdline() {
 	echo "${cmdline}"
 }
 
-setup_loop_device() {
-	local offset_MiB=$1
-	local size_MiB=$2
-	losetup --find --show --offset ${offset_MiB}MiB --size ${size_MiB}MiB /d2a/work/image
-}
-
 package_digitalocean_synchronize() {
 	local destination=$1
 	local pkgroot=/d2a/work/dosync
@@ -380,6 +374,7 @@ cleanup_work_directory() {
 	quietly_umount /d2a/work/archroot/sys
 	quietly_umount /d2a/work/archroot/proc
 	quietly_umount /d2a/work/archroot
+	losetup -D
 	rm -rf --one-file-system /d2a/work
 }
 
@@ -403,15 +398,16 @@ stage1_install() {
 	parted /d2a/work/image $(build_parted_cmdline)
 
 	log "Formatting image ..."
-	local doroot_loop=$(setup_loop_device ${doroot_offset_MiB} ${doroot_size_MiB})
-	local archroot_loop=$(setup_loop_device ${archroot_offset_MiB} ${archroot_size_MiB})
-	mkfs.ext4 -L DOROOT ${doroot_loop}
-	mkfs.${target_filesystem} -L ArchRoot ${archroot_loop}
+	modprobe loop
+	losetup -f -P /d2a/work/image
+	partprobe
+	mkfs.ext4 -L DOROOT /dev/disk/by-partlabel/DOROOT
+	mkfs.${target_filesystem} -L ArchRoot /dev/disk/by-partlabel/ArchRoot
 
 	log "Mounting image ..."
 	mkdir -p /d2a/work/{doroot,archroot}
-	mount ${doroot_loop} /d2a/work/doroot
-	mount ${archroot_loop} /d2a/work/archroot
+	mount /dev/disk/by-partlabel/DOROOT /d2a/work/doroot
+	mount /dev/disk/by-partlabel/ArchRoot /d2a/work/archroot
 
 	log "Setting up DOROOT ..."
 	mkdir -p /d2a/work/doroot/etc/network
