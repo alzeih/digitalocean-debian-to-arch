@@ -47,7 +47,7 @@ target_disklabel="gpt"
 target_filesystem="ext4"
 
 # new bootloader (grub/syslinux)
-target_bootloader=grub
+target_bootloader="grub"
 
 # use a separate boot partition
 target_boot_partition=1
