@@ -336,17 +336,6 @@ build_parted_cmdline() {
 	echo "${cmdline}"
 }
 
-genfstab_for() {
-	local partlabel=$1
-	local mountpoint=$2
-	local mount_args=$3
-	cat >> /d2a/work/archroot/etc/fstab <<-EOF
-		# ${mountpoint}
-		UUID="$( blkid -o value -s UUID -t PARTLABEL="${partlabel}")"	${mountpoint}	$( blkid -o value -s TYPE -t PARTLABEL="${partlabel}" )	${mount_args}
-
-	EOF
-}
-
 package_digitalocean_synchronize() {
 	local destination=$1
 	local pkgroot=/d2a/work/dosync
@@ -561,10 +550,7 @@ stage1_install() {
 	fi
 
 	log "Generating fstab ..."
-	genfstab_for "ArchRoot" "/" "rw,relatime	0	0"
-	if [ "${target_boot_partition}" ]; then
-		genfstab_for "ArchBoot" "/boot" "rw,relatime	0	1"
-	fi
+	/d2a/work/archroot/bin/genfstab -U -p /d2a/work/archroot >> /d2a/work/archroot/etc/fstab
 
 	log "Finishing up image generation ..."
 	ln -f /d2a/work/image /d2a/image
