@@ -539,8 +539,24 @@ stage1_install() {
 		EOF
 	fi
 
-	if [ "${target_bootloader}" = "syslinux" ]; then
+	log "Installing bootloader ..."
+	if [ "${target_bootloader}" = "grub" ]; then
+		chroot /d2a/work/archroot grub-mkconfig -o /boot/grub/grub.cfg
+		if [ "${target_disklabel}" = "gpt" ]; then
+			parted /d2a/work/image --script set 2 bios_grub on
+		elif [ "${target_disklabel}" = "msdos" ]; then
+			parted /d2a/work/image --script set 2 boot on
+		fi
+		grub-install --target i386-pc -d /d2a/work/archroot/usr/lib/grub/i386-pc/ --boot-directory /d2a/work/archroot/boot/grub /d2a/work/image
+	elif [ "${target_bootloader}" = "syslinux" ]; then
 		chroot /d2a/work/archroot syslinux-install_update -i
+		if [ "${target_disklabel}" = "gpt" ]; then
+			parted /d2a/work/image --script set 2 legacy_boot on
+			dd bs=440 count=1 conv=notrunc if=/d2a/work/archroot/usr/lib/syslinux/bios/gptmbr.bin of=/d2a/work/image
+		elif [ "${target_disklabel}" = "msdos" ]; then
+			parted /d2a/work/image --script set 2 boot on
+			dd bs=440 count=1 conv=notrunc if=/d2a/work/archroot/usr/lib/syslinux/bios/mbr.bin of=/d2a/work/image
+		fi
 		sed -i "s_    APPEND root=/dev/sda3 rw_    APPEND root=/dev/disk/by-partlabel/ArchRoot rw_" /d2a/work/archroot/boot/syslinux/syslinux.cfg
 	fi
 
@@ -891,27 +907,6 @@ stage4_convert() {
 
 	# reread partition table
 	blockdev --rereadpt /dev/vda
-
-	# install bootloader
-	mkdir /archroot
-
-	mount -a
-
-	mount -t proc proc /archroot/proc
-	mount -t sysfs sys /archroot/sys
-	mount -t devtmpfs dev /archroot/dev
-	if [ "${target_bootloader}" = "grub" ]; then
-		chroot /archroot sgdisk /dev/vda --attributes=2:set:2
-		chroot /archroot grub-mkconfig -o /boot/grub/grub.cfg
-		chroot /archroot grub-install /dev/vda
-	elif [ "${target_bootloader}" = "syslinux" ]; then
-		chroot /archroot syslinux-install_update -a -m
-	fi
-
-	umount /archroot/dev
-	umount /archroot/sys
-	umount /archroot/proc
-	umount -a
 
 	# we're done!
 	sync
