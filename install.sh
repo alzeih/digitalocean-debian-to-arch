@@ -50,7 +50,7 @@ target_filesystem="ext4"
 target_bootloader="grub"
 
 # use a separate boot partition
-target_boot_partition=1
+target_boot_partition=0
 
 # NOT EXPOSED NORMALLY: don't prompt
 continue_without_prompting=0
@@ -203,6 +203,9 @@ validate_flags_and_augment_globals() {
 			arch_packages+=(grub)
 			if [ "${target_disklabel}" = "gpt" ]; then
 				partitions+=(BIOSBoot)
+			fi
+			if [ "${target_boot_partition}" ]; then
+				partitions+=(ArchBoot)
 			fi
 			partitions+=(ArchRoot)
 			;;
