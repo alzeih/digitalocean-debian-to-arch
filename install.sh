@@ -40,7 +40,7 @@ kernel_package=linux
 # migrated machine architecture (x86_64/i686)
 target_architecture="$(uname -m)"
 
-# new disklabel type (gpt/dos)
+# new disklabel type (gpt/msdos)
 target_disklabel="gpt"
 
 # new filesystem type (ext4/btrfs)
@@ -181,7 +181,7 @@ validate_flags_and_augment_globals() {
 		gpt)
 			arch_packages+=(gptfdisk)
 			;;
-		dos)
+		msdos)
 			;;
 		*)
 			fatal "Unknown disklabel type: ${target_disklabel}"
@@ -287,7 +287,7 @@ build_parted_command () {
 	local gptlabel=$3
 	local cmdline=" mkpart"
 
-	if [ "${target_disklabel}" = "dos" ]; then
+	if [ "${target_disklabel}" = "msdos" ]; then
 		cmdline+=" primary"
 	elif [ "${target_disklabel}" = "gpt" ]; then
 		cmdline+=" ${gptlabel}"
