@@ -553,9 +553,6 @@ stage1_install() {
 	log "Finishing up image generation ..."
 	ln -f /d2a/work/image /d2a/image
 
-	cp /d2a/work/archroot/etc/fstab /d2a/fstab
-	sed -i "s_/_/archroot/_" /d2a/fstab
-
 	cleanup_work_directory
 	trap - EXIT
 }
@@ -820,9 +817,6 @@ stage3_prepare() {
 
 	# copy in the blockplan
 	cp /d2a/blockplan /d2a/mid/blockplan
-
-	# copy in the fstab
-	cp /d2a/fstab /d2a/mid/etc/fstab
 
 	# write out flags
 	write_flags /d2a/mid/flags
