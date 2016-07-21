@@ -378,10 +378,6 @@ cleanup_work_directory() {
 	kill_processes_in_mountpoint /d2a/work/archroot
 	quietly_umount /d2a/work/doroot
 	quietly_umount /d2a/work/archroot/var/cache/pacman/pkg
-	quietly_umount /d2a/work/archroot/dev/pts
-	quietly_umount /d2a/work/archroot/dev
-	quietly_umount /d2a/work/archroot/sys
-	quietly_umount /d2a/work/archroot/proc
 	quietly_umount /d2a/work/archroot/boot
 	quietly_umount /d2a/work/archroot
 	losetup -D
@@ -476,13 +472,6 @@ stage1_install() {
 		--directory=/d2a/work/archroot \
 		--strip-components=1
 
-	log "Mounting virtual filesystems ..."
-	mount -t proc proc /d2a/work/archroot/proc
-	mount -t sysfs sys /d2a/work/archroot/sys
-	mount -t devtmpfs dev /d2a/work/archroot/dev
-	mkdir -p /d2a/work/archroot/dev/pts
-	mount -t devpts pts /d2a/work/archroot/dev/pts
-
 	log "Binding packages directory ..."
 	mkdir -p /d2a/packages
 	mount --bind /d2a/packages /d2a/work/archroot/var/cache/pacman/pkg
@@ -491,10 +480,12 @@ stage1_install() {
 	echo "Server = ${archlinux_mirror}/\$repo/os/\$arch" > /d2a/work/archroot/etc/pacman.d/mirrorlist
 	echo 'nameserver 8.8.8.8' > /d2a/work/archroot/etc/resolv.conf
 
+	local arch_chroot="/d2a/work/archroot/bin/arch-chroot /d2a/work/archroot"
+
 	log "Installing base system ..."
-	chroot /d2a/work/archroot pacman-key --init
-	chroot /d2a/work/archroot pacman-key --populate archlinux
-	local chroot_pacman="chroot /d2a/work/archroot pacman --arch ${target_architecture}"
+	${arch_chroot} pacman-key --init
+	${arch_chroot} pacman-key --populate archlinux
+	local chroot_pacman="${arch_chroot} pacman --arch ${target_architecture}"
 	${chroot_pacman} -Sy
 	${chroot_pacman} -Su --noconfirm --needed \
 		$(${chroot_pacman} -Sgq base | grep -v '^linux$') \
@@ -504,9 +495,9 @@ stage1_install() {
 	hostname > /d2a/work/archroot/etc/hostname
 	cp /etc/ssh/ssh_host_* /d2a/work/archroot/etc/ssh/
 	local encrypted_password=$(awk -F: '$1 == "root" { print $2 }' /etc/shadow)
-	chroot /d2a/work/archroot usermod -p "${encrypted_password}" root
-	chroot /d2a/work/archroot systemctl enable systemd-networkd.service
-	chroot /d2a/work/archroot systemctl enable sshd.service
+	${arch_chroot} usermod -p "${encrypted_password}" root
+	${arch_chroot} systemctl enable systemd-networkd.service
+	${arch_chroot} systemctl enable sshd.service
 	package_digitalocean_synchronize /d2a/work/archroot/dosync.pkg.tar
 	${chroot_pacman} -U --noconfirm /dosync.pkg.tar
 	rm /d2a/work/archroot/dosync.pkg.tar
@@ -530,7 +521,7 @@ stage1_install() {
 
 	log "Installing bootloader ..."
 	if [ "${target_bootloader}" = "grub" ]; then
-		chroot /d2a/work/archroot grub-mkconfig -o /boot/grub/grub.cfg
+		${arch_chroot} grub-mkconfig -o /boot/grub/grub.cfg
 		if [ "${target_disklabel}" = "gpt" ]; then
 			parted /d2a/work/image --script set 2 bios_grub on
 		elif [ "${target_disklabel}" = "msdos" ]; then
@@ -538,7 +529,7 @@ stage1_install() {
 		fi
 		grub-install --target i386-pc -d /d2a/work/archroot/usr/lib/grub/i386-pc/ --boot-directory /d2a/work/archroot/boot/grub /d2a/work/image
 	elif [ "${target_bootloader}" = "syslinux" ]; then
-		chroot /d2a/work/archroot syslinux-install_update -i
+		${arch_chroot} syslinux-install_update -i
 		if [ "${target_disklabel}" = "gpt" ]; then
 			parted /d2a/work/image --script set 2 legacy_boot on
 			dd bs=440 count=1 conv=notrunc if=/d2a/work/archroot/usr/lib/syslinux/bios/gptmbr.bin of=/d2a/work/image
