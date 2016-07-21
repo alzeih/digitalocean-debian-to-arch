@@ -541,6 +541,7 @@ stage1_install() {
 	fi
 
 	log "Generating fstab ..."
+	umount /d2a/work/archroot/var/cache/pacman/pkg
 	/d2a/work/archroot/bin/genfstab -U -p /d2a/work/archroot >> /d2a/work/archroot/etc/fstab
 
 	log "Finishing up image generation ..."
