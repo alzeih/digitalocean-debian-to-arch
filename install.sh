@@ -525,10 +525,11 @@ stage1_install() {
 		${arch_chroot} grub-mkconfig -o /boot/grub/grub.cfg
 		if [ "${target_disklabel}" = "gpt" ]; then
 			parted /d2a/work/image --script set 2 bios_grub on
+			grub-install --target i386-pc -d /d2a/work/archroot/usr/lib/grub/i386-pc --boot-directory=/d2a/work/archroot/boot --modules="ext2 part_gpt" /d2a/work/image
 		elif [ "${target_disklabel}" = "msdos" ]; then
 			parted /d2a/work/image --script set 2 boot on
+			grub-install --target i386-pc -d /d2a/work/archroot/usr/lib/grub/i386-pc --boot-directory=/d2a/work/archroot/boot --modules="ext2 part_msdos" /d2a/work/image
 		fi
-		grub-install --target i386-pc -d /d2a/work/archroot/usr/lib/grub/i386-pc/ --boot-directory /d2a/work/archroot/boot/grub /d2a/work/image
 	elif [ "${target_bootloader}" = "syslinux" ]; then
 		${arch_chroot} syslinux-install_update -i
 		if [ "${target_disklabel}" = "gpt" ]; then
