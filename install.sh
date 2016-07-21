@@ -375,6 +375,7 @@ quietly_umount() {
 
 cleanup_work_directory() {
 	kill_processes_in_mountpoint /d2a/work/doroot
+	kill_processes_in_mountpoint /d2a/work/archroot/boot
 	kill_processes_in_mountpoint /d2a/work/archroot
 	quietly_umount /d2a/work/doroot
 	quietly_umount /d2a/work/archroot/var/cache/pacman/pkg
