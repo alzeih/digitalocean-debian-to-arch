@@ -204,14 +204,14 @@ validate_flags_and_augment_globals() {
 			if [ "${target_disklabel}" = "gpt" ]; then
 				partitions+=(BIOSBoot)
 			fi
-			if [ "${target_boot_partition}" ]; then
+			if (( ${target_boot_partition} )); then
 				partitions+=(ArchBoot)
 			fi
 			partitions+=(ArchRoot)
 			;;
 		syslinux)
 			arch_packages+=(syslinux)
-			if [ "${target_boot_partition}" ]; then
+			if (( ${target_boot_partition} )); then
 				partitions+=(ArchBoot)
 			fi
 			partitions+=(ArchRoot)
@@ -430,7 +430,7 @@ stage1_install() {
 
 	mkfs.ext4 -L DOROOT /dev/disk/by-partlabel/DOROOT
 	mkfs.${target_filesystem} -L ArchRoot /dev/disk/by-partlabel/ArchRoot
-	if [ "${target_boot_partition}" ]; then
+	if (( ${target_boot_partition} )); then
 		mkfs.ext4 -L ArchBoot /dev/disk/by-partlabel/ArchBoot
 	fi
 
@@ -438,7 +438,7 @@ stage1_install() {
 	mkdir -p /d2a/work/{doroot,archroot}
 	mount /dev/disk/by-partlabel/DOROOT /d2a/work/doroot
 	mount /dev/disk/by-partlabel/ArchRoot /d2a/work/archroot
-	if [ "${target_boot_partition}" ]; then
+	if (( ${target_boot_partition} )); then
 		mkdir /d2a/work/archroot/boot
 		mount /dev/disk/by-partlabel/ArchBoot /d2a/work/archroot/boot
 	fi
